@@ -1,0 +1,111 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Event Ticket Booking Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+    <h2>Event Ticket Booking Payment</h2>
+
+    <label>Booking ID:</label>
+    <input type="number" id="bookingId" value="6">
+
+    <br><br>
+
+    <label>JWT Access Token:</label>
+    <input type="password" id="token" placeholder="Paste your access token">
+
+    <br><br>
+
+    <button onclick="payNow()">Pay Now</button>
+
+    <p id="message"></p>
+
+    <script>
+        async function payNow() {
+            const bookingId = document.getElementById("bookingId").value;
+            const token = document.getElementById("token").value.trim();
+            const message = document.getElementById("message");
+
+            if (!bookingId || !token) {
+                message.innerText = "Enter Booking ID and JWT token.";
+                return;
+            }
+
+            try {
+                message.innerText = "Creating payment order...";
+
+                const orderResponse = await fetch(
+                    `/bookings/${bookingId}/pay`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json"
+                        }
+                    }
+                );
+
+                const order = await orderResponse.json();
+
+                if (!orderResponse.ok) {
+                    throw new Error(order.detail || "Order creation failed");
+                }
+
+                const options = {
+                    key: order.key_id,
+                    amount: order.amount,
+                    currency: order.currency,
+                    name: "Event & Movie Ticket Booking",
+                    description: "Ticket Booking Payment",
+                    order_id: order.razorpay_order_id,
+
+                    handler: async function(response) {
+                        message.innerText = "Verifying payment...";
+
+                        const verifyResponse = await fetch(
+                            `/bookings/${bookingId}/verify`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${token}`,
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_signature: response.razorpay_signature
+                                })
+                            }
+                        );
+
+                        const result = await verifyResponse.json();
+
+                        message.innerText = verifyResponse.ok
+                            ? "Payment successfully verified!"
+                            : (result.detail || "Verification failed.");
+                    },
+
+                    theme: {
+                        color: "#3399cc"
+                    }
+                };
+
+                const checkout = new Razorpay(options);
+
+                checkout.on("payment.failed", function(response) {
+                    message.innerText =
+                        response.error.description || "Payment failed.";
+                });
+
+                checkout.open();
+
+            } catch(error) {
+                message.innerText = error.message;
+            }
+        }
+    </script>
+</body>
+</html>
